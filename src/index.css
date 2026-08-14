@@ -1,0 +1,235 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300;1,9..144,400;1,9..144,600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  background-color: #F7F3EA;
+  color: #2A2318;
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+}
+
+/* Paper grain — fine fibrous texture, noticeable only up close.
+   Premium-stationery subtle, not vintage or photographic. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.78' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 280px 280px;
+}
+
+#root { position: relative; z-index: 1; }
+::-webkit-scrollbar { width: 0; }
+
+/* ── Custom cursor — hidden only when the JS cursor is actually mounted
+   (fine pointer + motion allowed). CustomCursor unmounts under the same
+   conditions, so native cursor and this rule always agree. ── */
+@media (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  html, body, * { cursor: none !important; }
+}
+#cursor-canvas {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9997;
+}
+.cursor-core { transform: translate(-50%, -50%); transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.25s ease; }
+.cursor-hover .cursor-core { transform: translate(-50%, -50%) scale(1.8); box-shadow: 0 0 10px rgba(143,89,96,0.4); }
+
+/* ── Visually-hidden text for screen readers (e.g. the marquee's decorative,
+   aria-hidden skill tiles still need their names announced once). ── */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Keyboard focus ── */
+a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid #7F5E3C;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ── Graph paper — soft engineering-notebook grid, should almost
+   disappear from a distance. Content stays the visual priority. ── */
+.graph-paper {
+  background-color: #F7F3EA;
+  background-image:
+    linear-gradient(rgba(135,118,102,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(135,118,102,0.05) 1px, transparent 1px),
+    linear-gradient(rgba(135,118,102,0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(135,118,102,0.018) 1px, transparent 1px);
+  background-size: 28px 28px, 28px 28px, 7px 7px, 7px 7px;
+}
+
+/* Alternate grid for darker sections */
+.graph-paper-alt {
+  background-color: #EDE8DD;
+  background-image:
+    linear-gradient(rgba(135,118,102,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(135,118,102,0.06) 1px, transparent 1px),
+    linear-gradient(rgba(135,118,102,0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(135,118,102,0.022) 1px, transparent 1px);
+  background-size: 28px 28px, 28px 28px, 7px 7px, 7px 7px;
+}
+
+/* ── Reveal animation ── */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.65s cubic-bezier(0.22,1,0.36,1), transform 0.65s cubic-bezier(0.22,1,0.36,1);
+}
+.reveal.visible { opacity: 1; transform: translateY(0); }
+
+/* ── Keyframes ── */
+@keyframes fadeIn      { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fadeInUp    { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeInDrift { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes charIn      { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes blurIn      { from { opacity: 0; filter: blur(7px); } to { opacity: 1; filter: blur(0); } }
+@keyframes blink       { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes star-spin   { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+.anim-fade       { animation: fadeIn      0.55s ease both; }
+.anim-fade-up    { animation: fadeInUp    0.7s  cubic-bezier(0.22,1,0.36,1) both; }
+.anim-fade-drift { animation: fadeInDrift 0.6s  cubic-bezier(0.22,1,0.36,1) both; }
+.anim-blur-in    { animation: blurIn      0.8s  cubic-bezier(0.22,1,0.36,1) both; }
+.char-reveal     { animation: charIn      0.45s cubic-bezier(0.22,1,0.36,1) both; }
+.cursor-blink    { animation: blink 1.1s step-end infinite; }
+.star-spin       { animation: star-spin 8s linear infinite; }
+
+.delay-100  { animation-delay: 0.10s; }
+.delay-200  { animation-delay: 0.20s; }
+.delay-300  { animation-delay: 0.30s; }
+.delay-400  { animation-delay: 0.40s; }
+.delay-500  { animation-delay: 0.50s; }
+.delay-600  { animation-delay: 0.60s; }
+.delay-700  { animation-delay: 0.70s; }
+.delay-800  { animation-delay: 0.80s; }
+.delay-900  { animation-delay: 0.90s; }
+.delay-1000 { animation-delay: 1.00s; }
+.delay-1200 { animation-delay: 1.20s; }
+.delay-1400 { animation-delay: 1.40s; }
+
+/* ── Nav pencil underline ── */
+.nav-link { position: relative; }
+.nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: -2px; left: 0;
+  width: 0; height: 1px;
+  background: #7F5E3C;
+  border-radius: 1px;
+  transition: width 0.28s cubic-bezier(0.22,1,0.36,1);
+  clip-path: polygon(0 0, 100% 15%, 100% 100%, 0 85%);
+}
+.nav-link:hover::after, .nav-link:focus-visible::after { width: 100%; }
+
+/* ── Magnetic button — a small spring overshoot, not a linear ease ── */
+.btn-mag { transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.25s ease; }
+.btn-mag:hover { transform: translateY(-2px) scale(1.025); box-shadow: 0 8px 22px rgba(75,38,21,0.14); }
+.btn-mag:active { transform: translateY(0) scale(0.98); }
+
+/* ── Marquee ── */
+@keyframes marquee-fwd { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+@keyframes marquee-rev { 0% { transform: translateX(-50%); } 100% { transform: translateX(0); } }
+
+.marquee-fwd {
+  display: flex;
+  animation: marquee-fwd 50s linear infinite;
+  will-change: transform;
+}
+.marquee-rev {
+  display: flex;
+  animation: marquee-rev 42s linear infinite;
+  will-change: transform;
+}
+.marquee-fwd:hover, .marquee-rev:hover { animation-play-state: paused; }
+
+/* ── Skill tile ── */
+.skill-tile {
+  transition: transform 0.3s cubic-bezier(0.22,1,0.36,1), box-shadow 0.3s ease, background 0.3s ease;
+  cursor: default;
+  flex-shrink: 0;
+}
+.skill-tile:hover {
+  transform: translateY(-6px) rotate(0.8deg) scale(1.03);
+  box-shadow: 0 16px 40px rgba(75,38,21,0.1);
+}
+
+/* ── Journey line ── */
+.journey-line {
+  stroke-dasharray: 600;
+  stroke-dashoffset: 600;
+  transition: stroke-dashoffset 1.8s cubic-bezier(0.22,1,0.36,1);
+}
+.journey-line.drawn { stroke-dashoffset: 0; }
+
+/* ── Pastel highlight for project titles ── */
+.pastel-hl {
+  position: relative;
+  display: inline;
+}
+.pastel-hl::before {
+  content: '';
+  position: absolute;
+  left: 0; bottom: 1px;
+  width: 0; height: 82%;
+  background: rgba(232,209,220,0.4);
+  border-radius: 3px;
+  transition: width 0.35s cubic-bezier(0.22,1,0.36,1);
+  z-index: -1;
+}
+.pastel-hl:hover::before { width: 100%; }
+
+/* ── Coffee steam — soft, slow, never smoke-like ── */
+@keyframes steam-rise {
+  0%   { transform: translateY(0) scaleY(1);    opacity: 0; }
+  18%  { opacity: 0.5; }
+  82%  { opacity: 0; }
+  100% { transform: translateY(-9px) scaleY(1.15); opacity: 0; }
+}
+.steam { animation: steam-rise 3.2s ease-in-out infinite; transform-origin: bottom center; }
+
+/* ── Note entrance — a soft spring settle, slight rotation easing into
+   its final resting angle rather than just fading in ── */
+@keyframes note-settle {
+  from { opacity: 0; transform: rotate(-7deg) scale(0.94); }
+  to   { opacity: 1; transform: rotate(-1.6deg) scale(1); }
+}
+.note-settle { animation: note-settle 0.85s cubic-bezier(0.22,1,0.36,1) both; }
+
+/* ── Scroll indicator — a tiny arrow nudging downward, like a comment
+   someone left at the bottom of the page rather than a UI widget ── */
+@keyframes scroll-nudge { 0%, 100% { transform: translateY(0); opacity: 0.65; } 50% { transform: translateY(5px); opacity: 1; } }
+.scroll-arrow { animation: scroll-nudge 2.2s ease-in-out infinite; }
+
+/* ── Reduced motion — collapse everything to its resting state instead of
+   animating. ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .reveal { opacity: 1 !important; transform: none !important; }
+  .journey-line { stroke-dashoffset: 0 !important; }
+  .marquee-fwd, .marquee-rev { animation: none !important; }
+}
