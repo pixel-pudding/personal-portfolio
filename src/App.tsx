@@ -101,81 +101,74 @@ function useScrollY(): number {
 }
 
 /* ────────────────────────────────────────────────────────────────────
-   CUSTOM CURSOR — a small, quiet dot with a short fading trail that
-   drifts through the palette. Pure DOM refs + canvas, zero React state
-   per frame: mousemove only writes to plain variables, and a single
-   rAF loop reads them, so nothing here triggers a re-render.
-──────────────────────────────────────────────────────────────────── */
-function lerpHex(a: string, b: string, t: number): string {
-  const h = (s: string) => [parseInt(s.slice(1,3),16), parseInt(s.slice(3,5),16), parseInt(s.slice(5,7),16)]
-  const [ar,ag,ab] = h(a), [br,bg,bb] = h(b)
-  return `rgb(${Math.round(ar+(br-ar)*t)},${Math.round(ag+(bg-ag)*t)},${Math.round(ab+(bb-ab)*t)})`
-}
-function paletteAt(t: number): string {
-  const stops = [P.rosewood, P.dusty_pink, P.muted_sage, P.almond]
-  const span = t * (stops.length - 1)
-  const i = Math.min(Math.floor(span), stops.length - 2)
-  return lerpHex(stops[i], stops[i + 1], span - i)
-}
+   FLUID CURSOR — a tiny paint-drop that trails the real pointer with a
+   soft spring, stretching along its direction of travel and relaxing
+   back to a circle at rest. One faint echo behind it, nothing more.
 
+   Everything here lives in plain refs and mutable closure variables —
+   mousemove never touches React state, so there is no re-render on
+   pointer movement. The single rAF loop reads the latest target
+   position and writes `transform: translate3d(...)` directly to two
+   DOM nodes, which is compositor-only work the GPU handles for free.
+──────────────────────────────────────────────────────────────────── */
 function CustomCursor() {
-  const dotRef = useRef<HTMLDivElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const mainRef = useRef<HTMLDivElement>(null)
+  const echoRef = useRef<HTMLDivElement>(null)
   const reduceMotion = usePrefersReducedMotion()
   const coarsePointer = useIsCoarsePointer()
   const disabled = reduceMotion || coarsePointer
 
   useEffect(() => {
     if (disabled) return
-    const dot = dotRef.current, canvas = canvasRef.current
-    if (!dot || !canvas) return
-    const ctx = canvas.getContext('2d')!
-    let W = window.innerWidth, H = window.innerHeight
-    canvas.width = W; canvas.height = H
-    const onResize = () => { W = window.innerWidth; H = window.innerHeight; canvas.width = W; canvas.height = H }
-    window.addEventListener('resize', onResize)
+    const main = mainRef.current, echo = echoRef.current
+    if (!main || !echo) return
 
-    let mx = -100, my = -100 // raw pointer target
-    let px = -100, py = -100 // eased visual position — the "slightly magical" lag
-    let active = false
+    let mx = -100, my = -100          // raw pointer target
+    let mainX = -100, mainY = -100    // spring-eased main position
+    let echoX = -100, echoY = -100    // slightly slower echo position
+    let hover: 'none' | 'link' | 'tile' = 'none'
 
-    const onMove = (e: MouseEvent) => { mx = e.clientX; my = e.clientY; active = true }
-    document.addEventListener('mousemove', onMove)
+    const onMove = (e: MouseEvent) => { mx = e.clientX; my = e.clientY }
+    document.addEventListener('mousemove', onMove, { passive: true })
 
-    // Hover reaction on interactive elements — plain classList toggling,
-    // no React state, so it costs nothing beyond a CSS transition.
+    // Hover reactions — plain classList/variable writes, never React state.
     const onOver = (e: MouseEvent) => {
-      if ((e.target as HTMLElement).closest('a, button')) dot.classList.add('cursor-hover')
+      const t = e.target as HTMLElement
+      if (t.closest('[data-cursor="tile"]')) hover = 'tile'
+      else if (t.closest('a, button')) hover = 'link'
+      else return
+      main.classList.add('cursor-hover')
     }
     const onOut = (e: MouseEvent) => {
-      if ((e.target as HTMLElement).closest('a, button')) dot.classList.remove('cursor-hover')
+      if ((e.target as HTMLElement).closest('a, button, [data-cursor="tile"]')) {
+        hover = 'none'
+        main.classList.remove('cursor-hover')
+      }
     }
     document.addEventListener('mouseover', onOver)
     document.addEventListener('mouseout', onOut)
 
-    type Pt = { x: number; y: number; age: number }
-    const trail: Pt[] = []
-    const MAX_AGE = 15
-
     let raf = 0
     const tick = () => {
-      px += (mx - px) * 0.22
-      py += (my - py) * 0.22
-      if (active) dot.style.transform = `translate(${px}px, ${py}px)`
+      // Snappy spring for the main drop — attached to the pointer, not
+      // chasing it. The echo lags a bit further behind for the "soft
+      // after-image" feel, and fades toward the same target on its own.
+      mainX += (mx - mainX) * 0.38
+      mainY += (my - mainY) * 0.38
+      echoX += (mx - echoX) * 0.16
+      echoY += (my - echoY) * 0.16
 
-      trail.push({ x: px, y: py, age: 0 })
-      ctx.clearRect(0, 0, W, H)
-      for (let i = trail.length - 1; i >= 0; i--) {
-        const p = trail[i]
-        p.age++
-        if (p.age > MAX_AGE) { trail.splice(i, 1); continue }
-        const t = p.age / MAX_AGE
-        ctx.globalAlpha = (1 - t) * 0.22
-        ctx.fillStyle = paletteAt(t)
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, 2.6 * (1 - t * 0.6), 0, Math.PI * 2)
-        ctx.fill()
-      }
+      const vx = mx - mainX, vy = my - mainY
+      const speed = Math.min(Math.hypot(vx, vy), 34)
+      const angle = speed > 1 ? Math.atan2(vy, vx) * 180 / Math.PI : 0
+      const stretch = 1 + (speed / 34) * 0.45
+      const squeeze = 1 - (speed / 34) * 0.16
+      const scale = hover !== 'none' ? 1.6 : 1
+
+      main.style.transform =
+        `translate3d(${mainX}px, ${mainY}px, 0) rotate(${angle}deg) scale(${stretch * scale}, ${squeeze * scale})`
+      echo.style.transform = `translate3d(${echoX}px, ${echoY}px, 0) scale(${scale})`
+
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -184,7 +177,6 @@ function CustomCursor() {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseover', onOver)
       document.removeEventListener('mouseout', onOut)
-      window.removeEventListener('resize', onResize)
       cancelAnimationFrame(raf)
     }
   }, [disabled])
@@ -193,16 +185,8 @@ function CustomCursor() {
 
   return (
     <>
-      <canvas ref={canvasRef} id="cursor-canvas" aria-hidden="true" />
-      <div ref={dotRef} aria-hidden="true" className="cursor-dot" style={{
-        position: 'fixed', top: 0, left: 0, pointerEvents: 'none', zIndex: 9999, willChange: 'transform',
-      }}>
-        <div className="cursor-core" style={{
-          width: 9, height: 9, borderRadius: '50%',
-          background: P.rosewood,
-          boxShadow: `0 0 7px ${P.dusty_pink}88`,
-        }} />
-      </div>
+      <div ref={echoRef} aria-hidden="true" className="cursor-echo" />
+      <div ref={mainRef} aria-hidden="true" className="cursor-main" />
     </>
   )
 }
@@ -595,30 +579,29 @@ function Hero() {
             <HeroHeadline />
 
             <p className="anim-fade-up delay-800" style={{ color: P.charcoal, fontSize: '1.2rem', lineHeight: 1.6, marginTop: 22, maxWidth: 440 }}>
-              Computer Science student building full-stack applications,<br />
-              AI-powered systems, and things that make me curious.
+              Pre-final year Computer Science student at BMSCE, building full-stack applications with a keen interest in AI.
             </p>
             <div className="anim-fade-up delay-1000 flex flex-wrap gap-3 mt-8">
               <a href="#projects" className="btn-mag" style={{
                 display: 'inline-flex', alignItems: 'center', gap: 8,
-                background: P.coffee, color: '#FDF8F2',
+                background: `linear-gradient(135deg, ${P.coffee} 0%, ${P.coffee} 100%)`, color: '#FDF8F2',
                 padding: '11px 22px', borderRadius: 8,
                 fontFamily: 'DM Sans, sans-serif', fontWeight: 600, fontSize: '0.78rem', letterSpacing: '0.05em',
-                textDecoration: 'none', transition: 'background 0.22s ease, transform 0.3s cubic-bezier(0.34,1.56,0.64,1)',
+                textDecoration: 'none', transition: 'background 0.3s ease, transform 0.3s cubic-bezier(0.34,1.56,0.64,1)',
               }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = P.deep_green }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = P.coffee }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = `linear-gradient(135deg, ${P.coffee} 0%, ${P.deep_green} 100%)` }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = `linear-gradient(135deg, ${P.coffee} 0%, ${P.coffee} 100%)` }}
               >VIEW MY WORK →</a>
               <a href="#contact" className="btn-mag" style={{
                 display: 'inline-flex', alignItems: 'center', gap: 8,
-                background: P.cream, color: P.coffee,
+                background: `linear-gradient(135deg, ${P.cream} 0%, ${P.cream} 100%)`, color: P.coffee,
                 padding: '11px 22px', borderRadius: 8,
                 fontFamily: 'DM Sans, sans-serif', fontWeight: 600, fontSize: '0.78rem', letterSpacing: '0.05em',
                 textDecoration: 'none', border: `1.5px solid rgba(75,38,21,0.2)`,
-                transition: 'background 0.2s, border-color 0.2s, transform 0.3s cubic-bezier(0.34,1.56,0.64,1)',
+                transition: 'background 0.3s ease, border-color 0.2s, transform 0.3s cubic-bezier(0.34,1.56,0.64,1)',
               }}
-                onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.background = P.almond; el.style.borderColor = 'rgba(75,38,21,0.38)' }}
-                onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.background = P.cream; el.style.borderColor = 'rgba(75,38,21,0.2)' }}
+                onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.background = `linear-gradient(135deg, ${P.cream} 0%, ${P.almond} 100%)`; el.style.borderColor = 'rgba(75,38,21,0.38)' }}
+                onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.background = `linear-gradient(135deg, ${P.cream} 0%, ${P.cream} 100%)`; el.style.borderColor = 'rgba(75,38,21,0.2)' }}
               >LET'S CONNECT →</a>
             </div>
           </div>
@@ -727,6 +710,32 @@ function SafeGridSketch({ hov }: { hov: boolean }) {
   )
 }
 
+function RouterSketch({ hov }: { hov: boolean }) {
+  return (
+    <svg viewBox="0 0 160 88" width="160" height="88" fill="none" role="img"
+      aria-label="Sketch of text, image, and voice inputs routed through an agent into notify, digest, or mute decisions"
+      style={{ opacity: hov ? 1 : 0.52, transition: 'opacity 0.3s, transform 0.3s', transform: hov ? 'scale(1.04)' : 'scale(1)' }}>
+      <rect x="6" y="10" width="27" height="15" rx="4" stroke={P.dusty_pink} strokeWidth="1.3"/>
+      <circle cx="19" cy="44" r="10" stroke={P.mojave} strokeWidth="1.3"/>
+      <path d="M7 68 Q11 62 15 68 Q19 74 23 68 Q27 62 31 68" stroke={P.deep_green} strokeWidth="1.3" fill="none" strokeLinecap="round"/>
+      <circle cx="80" cy="44" r="15" stroke={P.berkeley} strokeWidth="1.5"/>
+      <path d="M33 17 L66 38" stroke={P.almond} strokeWidth="1.1" strokeDasharray="3 2"/>
+      <path d="M29 44 L65 44" stroke={P.almond} strokeWidth="1.1" strokeDasharray="3 2"/>
+      <path d="M29 68 L66 50" stroke={P.almond} strokeWidth="1.1" strokeDasharray="3 2"/>
+      <rect x="120" y="9"  width="34" height="14" rx="7" stroke={P.dusty_pink} strokeWidth="1.2"/>
+      <rect x="120" y="37" width="34" height="14" rx="7" stroke={P.mojave}     strokeWidth="1.2"/>
+      <rect x="120" y="65" width="34" height="14" rx="7" stroke={P.mountain}   strokeWidth="1.2"/>
+      <path d="M95 38 L120 16" stroke={P.almond} strokeWidth="1.1" strokeDasharray="3 2"/>
+      <path d="M95 44 L120 44" stroke={P.almond} strokeWidth="1.1" strokeDasharray="3 2"/>
+      <path d="M95 50 L120 72" stroke={P.almond} strokeWidth="1.1" strokeDasharray="3 2"/>
+      <text x="125" y="19" fontFamily="Caveat" fontSize="8" fill={P.dusty_pink}>notify</text>
+      <text x="126" y="47" fontFamily="Caveat" fontSize="8" fill={P.mojave}>digest</text>
+      <text x="129" y="75" fontFamily="Caveat" fontSize="8" fill={P.mountain}>mute</text>
+      <text x="47" y="80" fontFamily="Caveat" fontSize="7" fill={P.charcoal}>text · image · voice</text>
+    </svg>
+  )
+}
+
 /* ────────────────────────────────────────────────────────────────────
    PROJECTS
 ──────────────────────────────────────────────────────────────────── */
@@ -760,6 +769,16 @@ const PROJECTS = [
     accentColor: P.blue_gray,
     accentText: P.deep_green,
     Sketch: SafeGridSketch,
+  },
+  {
+    num: '04', name: 'Message Router',
+    desc: 'Agentic WhatsApp notification router that reasons over text, image OCR, and voice to decide notify, digest, or mute.',
+    tech: ['Python', 'Gemini API', 'Groq Whisper', 'Agentic AI'],
+    cardBg: 'linear-gradient(145deg, #FCFBEA 0%, #F3EFC6 100%)',
+    borderColor: 'rgba(236,233,190,0.65)',
+    accentColor: P.pale_butter,
+    accentText: P.berkeley,
+    Sketch: RouterSketch,
   },
 ]
 
@@ -823,7 +842,7 @@ function Projects() {
             things I've built.
           </h2>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }}>
+        <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: 20 }}>
           {PROJECTS.map((p, i) => <ProjectCard key={p.num} p={p} index={i} />)}
         </div>
       </div>
@@ -832,54 +851,61 @@ function Projects() {
 }
 
 /* ────────────────────────────────────────────────────────────────────
-   SKILLS — full palette tile colors
+   SKILLS — a stable, organized grid of square stationery tiles. No
+   banner, no scroll — the palette does the work of feeling alive.
 ──────────────────────────────────────────────────────────────────── */
-const ROW1 = [
-  { name: 'Python',       cat: 'LANGUAGE',  tileBg: 'linear-gradient(135deg,#FCFBEA,#F5F2D2)', logoColor: P.pale_butter, num: '01' },
-  { name: 'C++',          cat: 'LANGUAGE',  tileBg: 'linear-gradient(135deg,#FBF0F4,#F4E4EB)', logoColor: P.dusty_rose, num: '02' },
-  { name: 'Java',         cat: 'LANGUAGE',  tileBg: 'linear-gradient(135deg,#FAF5EE,#F2E8DA)', logoColor: P.almond,     num: '03' },
-  { name: 'JavaScript',   cat: 'LANGUAGE',  tileBg: 'linear-gradient(135deg,#F8F3E6,#F0E7D0)', logoColor: P.warm_sand,  num: '04' },
-  { name: 'TypeScript',   cat: 'LANGUAGE',  tileBg: 'linear-gradient(135deg,#EEF7EE,#DFF0DF)', logoColor: P.sage,       num: '05' },
-  { name: 'React',        cat: 'FRONTEND',  tileBg: 'linear-gradient(135deg,#EEF4FA,#DDE9F6)', logoColor: P.blue_gray,  num: '06' },
-  { name: 'React Native', cat: 'FRONTEND',  tileBg: 'linear-gradient(135deg,#FDF6F8,#F5EAEF)', logoColor: P.dusty_pink, num: '07' },
-  { name: 'Node.js',      cat: 'BACKEND',   tileBg: 'linear-gradient(135deg,#EAF2EC,#D8EADB)', logoColor: P.deep_green, num: '08' },
-  { name: 'Git',          cat: 'TOOL',      tileBg: 'linear-gradient(135deg,#F5EDE6,#EBDFD2)', logoColor: P.coffee,     num: '09' },
+const SKILLS = [
+  { name: 'Python',       cat: 'LANGUAGE',  tileBg: 'linear-gradient(135deg,#FCFBEA,#F5F2D2)', logoColor: P.berkeley    },
+  { name: 'C++',          cat: 'LANGUAGE',  tileBg: 'linear-gradient(135deg,#FBF0F4,#F4E4EB)', logoColor: P.rosewood    },
+  { name: 'Java',         cat: 'LANGUAGE',  tileBg: 'linear-gradient(135deg,#FAF5EE,#F2E8DA)', logoColor: P.almond     },
+  { name: 'JavaScript',   cat: 'LANGUAGE',  tileBg: 'linear-gradient(135deg,#F8F3E6,#F0E7D0)', logoColor: P.warm_sand  },
+  { name: 'TypeScript',   cat: 'LANGUAGE',  tileBg: 'linear-gradient(135deg,#EEF7EE,#DFF0DF)', logoColor: P.sage       },
+  { name: 'React',        cat: 'FRONTEND',  tileBg: 'linear-gradient(135deg,#EEF4FA,#DDE9F6)', logoColor: P.blue_gray  },
+  { name: 'React Native', cat: 'FRONTEND',  tileBg: 'linear-gradient(135deg,#FDF6F8,#F5EAEF)', logoColor: P.rosewood   },
+  { name: 'Node.js',      cat: 'BACKEND',   tileBg: 'linear-gradient(135deg,#EAF2EC,#D8EADB)', logoColor: P.deep_green },
+  { name: 'Git',          cat: 'TOOL',      tileBg: 'linear-gradient(135deg,#F5EDE6,#EBDFD2)', logoColor: P.coffee     },
+  { name: 'Express',      cat: 'BACKEND',   tileBg: 'linear-gradient(135deg,#F7F1E8,#EEE4D4)', logoColor: P.berkeley   },
+  { name: 'FastAPI',      cat: 'BACKEND',   tileBg: 'linear-gradient(135deg,#EDF6F3,#DCF0E9)', logoColor: P.muted_sage },
+  { name: 'MongoDB',      cat: 'DATABASE',  tileBg: 'linear-gradient(135deg,#EEF7EE,#DFF0DF)', logoColor: P.sage       },
+  { name: 'PostgreSQL',   cat: 'DATABASE',  tileBg: 'linear-gradient(135deg,#EEF4FA,#DDE9F6)', logoColor: P.blue_gray  },
+  { name: 'MySQL',        cat: 'DATABASE',  tileBg: 'linear-gradient(135deg,#F8F3E9,#EFE6D6)', logoColor: P.mojave     },
+  { name: 'ChromaDB',     cat: 'AI / DATA', tileBg: 'linear-gradient(135deg,#F0F5FA,#E3EDF5)', logoColor: P.blue_gray  },
+  { name: 'LangGraph',    cat: 'AI / DATA', tileBg: 'linear-gradient(135deg,#FDF6F8,#F5EAEF)', logoColor: P.rosewood   },
+  { name: 'WebSocket',    cat: 'TOOL',      tileBg: 'linear-gradient(135deg,#EFF1F0,#E1E5E2)', logoColor: P.charcoal   },
+  { name: 'Tailwind',     cat: 'TOOL',      tileBg: 'linear-gradient(135deg,#EAF2EC,#D8EADB)', logoColor: P.deep_green },
 ]
-const ROW2 = [
-  { name: 'Express',      cat: 'BACKEND',   tileBg: 'linear-gradient(135deg,#F7F1E8,#EEE4D4)', logoColor: P.berkeley,    num: '10' },
-  { name: 'FastAPI',      cat: 'BACKEND',   tileBg: 'linear-gradient(135deg,#EDF6F3,#DCF0E9)', logoColor: P.muted_sage,  num: '11' },
-  { name: 'MongoDB',      cat: 'DATABASE',  tileBg: 'linear-gradient(135deg,#EEF7EE,#DFF0DF)', logoColor: P.sage,        num: '12' },
-  { name: 'PostgreSQL',   cat: 'DATABASE',  tileBg: 'linear-gradient(135deg,#EEF4FA,#DDE9F6)', logoColor: P.blue_gray,   num: '13' },
-  { name: 'MySQL',        cat: 'DATABASE',  tileBg: 'linear-gradient(135deg,#F8F3E9,#EFE6D6)', logoColor: P.mojave,      num: '14' },
-  { name: 'ChromaDB',     cat: 'AI / DATA', tileBg: 'linear-gradient(135deg,#F0F5FA,#E3EDF5)', logoColor: P.pale_blue,   num: '15' },
-  { name: 'LangGraph',    cat: 'AI / DATA', tileBg: 'linear-gradient(135deg,#FDF6F8,#F5EAEF)', logoColor: P.dusty_pink,  num: '16' },
-  { name: 'WebSocket',    cat: 'TOOL',      tileBg: 'linear-gradient(135deg,#EFF1F0,#E1E5E2)', logoColor: P.charcoal,    num: '17' },
-  { name: 'Tailwind',     cat: 'TOOL',      tileBg: 'linear-gradient(135deg,#EAF2EC,#D8EADB)', logoColor: P.deep_green,  num: '18' },
-]
+// A few tiles carry a tiny rotation so the grid reads as placed, not printed.
+const TILE_ROTATE: Record<number, string> = { 1: '-0.6deg', 4: '0.7deg', 7: '-0.5deg', 10: '0.6deg', 14: '-0.7deg', 16: '0.5deg' }
 
-function SkillTile({ t }: { t: typeof ROW1[0] }) {
+function SkillTile({ t, index }: { t: typeof SKILLS[0]; index: number }) {
   const [hov, setHov] = useState(false)
+  const ref = useReveal()
   return (
-    <div className="skill-tile"
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        width: 144,
-        background: hov ? t.tileBg : '#FFFEF9',
-        border: `1.5px solid rgba(135,118,102,${hov ? '0.18' : '0.08'})`,
-        borderRadius: 12, padding: '18px 14px 14px', margin: '0 8px',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9,
-        boxShadow: hov ? `0 14px 36px rgba(75,38,21,0.09), 0 0 0 1.5px ${t.logoColor}1A` : '0 1px 5px rgba(75,38,21,0.03)',
-        position: 'relative', overflow: 'hidden',
-      }}>
-      <span aria-hidden="true" style={{ position: 'absolute', top: 8, left: 10, fontFamily: 'JetBrains Mono', fontSize: '0.5rem', color: `${t.logoColor}55`, letterSpacing: '0.05em' }}>{t.num}</span>
-      <div aria-hidden="true" style={{ position: 'absolute', bottom: -12, right: -12, width: 42, height: 42, borderRadius: '50%', border: `1.5px solid ${t.logoColor}`, opacity: hov ? 0.3 : 0.07, transform: hov ? 'scale(1.3)' : 'scale(1)', transition: 'opacity 0.3s, transform 0.3s' }} />
-      <div style={{ transform: hov ? 'scale(1.12)' : 'scale(1)', transition: 'transform 0.3s ease' }}>
-        <TechLogo name={t.name} color={t.logoColor} />
-      </div>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontFamily: 'DM Sans, sans-serif', fontWeight: 700, fontSize: '0.82rem', color: P.ink }}>{t.name}</div>
-        <div style={{ fontFamily: 'JetBrains Mono', fontSize: '0.5rem', color: P.muted, letterSpacing: '0.1em', marginTop: 3 }}>{t.cat}</div>
+    <div ref={ref} className="reveal" style={{ transitionDelay: `${(index % 6) * 70}ms` }}>
+      <div
+        data-cursor="tile"
+        onMouseEnter={() => setHov(true)}
+        onMouseLeave={() => setHov(false)}
+        style={{
+          aspectRatio: '1 / 1',
+          background: t.tileBg,
+          filter: hov ? 'saturate(1.3)' : 'saturate(1)',
+          border: `1.5px solid rgba(135,118,102,${hov ? '0.22' : '0.1'})`,
+          borderRadius: 14,
+          padding: '18px 14px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12,
+          transform: `rotate(${TILE_ROTATE[index] ?? '0deg'}) translateY(${hov ? -6 : 0}px) rotate(${hov ? '1deg' : '0deg'})`,
+          boxShadow: hov ? `0 16px 34px rgba(75,38,21,0.12), 0 0 0 1.5px ${t.logoColor}33` : '0 1px 6px rgba(75,38,21,0.05)',
+          transition: 'transform 0.35s cubic-bezier(0.22,1,0.36,1), box-shadow 0.35s ease, filter 0.35s ease, border-color 0.35s ease',
+          position: 'relative',
+        }}>
+        <div style={{ transform: hov ? 'scale(1.07)' : 'scale(1)', transition: 'transform 0.35s cubic-bezier(0.22,1,0.36,1)' }}>
+          <TechLogo name={t.name} color={t.logoColor} />
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontFamily: 'DM Sans, sans-serif', fontWeight: 700, fontSize: '0.88rem', color: P.ink }}>{t.name}</div>
+          <div style={{ fontFamily: 'JetBrains Mono', fontSize: '0.52rem', color: P.muted, letterSpacing: '0.1em', marginTop: 4 }}>{t.cat}</div>
+        </div>
       </div>
     </div>
   )
@@ -888,34 +914,24 @@ function SkillTile({ t }: { t: typeof ROW1[0] }) {
 function Skills() {
   const ref = useReveal()
   return (
-    <section id="skills" className="py-24 overflow-hidden graph-paper-alt">
-      <div className="max-w-6xl mx-auto px-6">
+    <section id="skills" className="py-24 px-6 graph-paper-alt">
+      <div className="max-w-6xl mx-auto">
         <div ref={ref} className="reveal">
           <Label idx="03" text="TOOLBOX" />
           <h2 style={{ fontFamily: 'Fraunces, serif', fontStyle: 'italic', fontWeight: 300, fontSize: 'clamp(2rem,5vw,3.4rem)', color: P.ink, letterSpacing: '-0.02em', marginBottom: 44 }}>
             things I build with.
           </h2>
         </div>
-      </div>
-      <div aria-hidden="true" style={{ overflow: 'hidden', marginBottom: 14, padding: '6px 0' }}>
-        <div className="marquee-fwd" style={{ display: 'flex', alignItems: 'stretch' }}>
-          {[...ROW1, ...ROW1].map((t, i) => <SkillTile key={i} t={t} />)}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6" style={{ gap: 16 }}>
+          {SKILLS.map((t, i) => <SkillTile key={t.name} t={t} index={i} />)}
         </div>
-      </div>
-      <div aria-hidden="true" style={{ overflow: 'hidden', padding: '6px 0' }}>
-        <div className="marquee-rev" style={{ display: 'flex', alignItems: 'stretch' }}>
-          {[...ROW2, ...ROW2].map((t, i) => <SkillTile key={i} t={t} />)}
+        <div className="mt-10 flex items-center gap-3">
+          <span style={{ fontFamily: 'Caveat', fontSize: '0.95rem', color: P.mountain }}>// still learning, always curious</span>
+          <svg viewBox="0 0 30 10" width="30" height="10" fill="none" aria-hidden="true">
+            <path d="M2 5 Q12 2 22 5 Q26 6 28 5" stroke={P.muted_sage} strokeWidth="1.2" strokeLinecap="round"/>
+            <path d="M24 2 L28 5 L24 8" stroke={P.muted_sage} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
         </div>
-      </div>
-      <p className="sr-only">
-        Toolbox: {[...ROW1, ...ROW2].map(t => t.name).join(', ')}.
-      </p>
-      <div className="max-w-6xl mx-auto px-6 mt-10 flex items-center gap-3">
-        <span style={{ fontFamily: 'Caveat', fontSize: '0.95rem', color: P.mountain }}>// still learning, always curious</span>
-        <svg viewBox="0 0 30 10" width="30" height="10" fill="none" aria-hidden="true">
-          <path d="M2 5 Q12 2 22 5 Q26 6 28 5" stroke={P.muted_sage} strokeWidth="1.2" strokeLinecap="round"/>
-          <path d="M24 2 L28 5 L24 8" stroke={P.muted_sage} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
       </div>
     </section>
   )
@@ -931,11 +947,46 @@ const INFO_CARDS = [
   { label: 'CURRENTLY', items: ['Building Safe Grid', 'Google GenAI Academy'],          bg: 'linear-gradient(135deg,#EEF4FA,#DDE9F6)', rotate: '0.4deg',  dot: P.blue_gray },
 ]
 
+function InfoCardTile({ card, index }: { card: typeof INFO_CARDS[0]; index: number }) {
+  const [hov, setHov] = useState(false)
+  const ref = useReveal()
+  return (
+    <div ref={ref} className="reveal" style={{ transitionDelay: `${index * 90}ms` }}>
+      <div
+        onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+        style={{
+          background: card.bg,
+          border: '1.5px solid rgba(135,118,102,0.1)',
+          borderRadius: 11, padding: '16px 14px',
+          transform: `rotate(${card.rotate}) translateY(${hov ? -4 : 0}px)`,
+          boxShadow: hov ? '0 10px 22px rgba(75,38,21,0.08)' : '0 1px 4px rgba(75,38,21,0.03)',
+          transition: 'transform 0.3s cubic-bezier(0.22,1,0.36,1), box-shadow 0.3s ease',
+          position: 'relative',
+        }}>
+        <div aria-hidden="true" style={{ position: 'absolute', top: 8, right: 10 }}>
+          <StarMark size={6} color={card.dot} rotate={index * 22} />
+        </div>
+        <div style={{ fontFamily: 'JetBrains Mono', fontSize: '0.58rem', color: P.muted, letterSpacing: '0.1em', marginBottom: 10 }}>{card.label}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {card.items.map(item => (
+            <div key={item} style={{ fontSize: '0.8rem', color: P.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div aria-hidden="true" style={{ width: 3, height: 3, borderRadius: '50%', background: card.dot, flexShrink: 0 }} />
+              {item}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function About() {
   const ref = useReveal()
   return (
-    <section id="about" className="graph-paper py-24 px-6 relative">
-      <div className="max-w-6xl mx-auto">
+    <section id="about" className="graph-paper py-24 px-6 relative overflow-hidden">
+      <ColorWash color={P.sage}       size={340} style={{ left: '-4%', top: '10%' }} />
+      <ColorWash color={P.blue_gray}  size={260} style={{ right: '2%', bottom: '4%' }} />
+      <div className="max-w-6xl mx-auto relative">
         <div ref={ref} className="reveal"><Label idx="04" text="ABOUT" /></div>
         <div className="grid md:grid-cols-2 gap-16 items-start mt-8">
           <div>
@@ -963,28 +1014,7 @@ function About() {
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            {INFO_CARDS.map((card, i) => (
-              <div key={card.label} style={{
-                background: card.bg,
-                border: '1.5px solid rgba(135,118,102,0.1)',
-                borderRadius: 11, padding: '16px 14px',
-                transform: `rotate(${card.rotate})`,
-                position: 'relative',
-              }}>
-                <div aria-hidden="true" style={{ position: 'absolute', top: 8, right: 10 }}>
-                  <StarMark size={6} color={card.dot} rotate={i * 22} />
-                </div>
-                <div style={{ fontFamily: 'JetBrains Mono', fontSize: '0.58rem', color: P.muted, letterSpacing: '0.1em', marginBottom: 10 }}>{card.label}</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {card.items.map(item => (
-                    <div key={item} style={{ fontSize: '0.8rem', color: P.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div aria-hidden="true" style={{ width: 3, height: 3, borderRadius: '50%', background: card.dot, flexShrink: 0 }} />
-                      {item}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+            {INFO_CARDS.map((card, i) => <InfoCardTile key={card.label} card={card} index={i} />)}
           </div>
         </div>
       </div>
@@ -996,22 +1026,41 @@ function About() {
    JOURNEY — palette nodes
 ──────────────────────────────────────────────────────────────────── */
 const TIMELINE = [
-  { year: '2024', tag: 'LEARNING', desc: 'Foundations: data structures, algorithms, first real projects. A lot of things breaking.', color: P.sage },
-  { year: '2025', tag: 'BUILDING', desc: 'Full-stack apps, AI experiments, open source contributions, learning to ship.',            color: P.dusty_rose },
-  { year: '2026', tag: 'SHIPPING', desc: 'Real products. Verity, Safe Grid, an agentic notification router — and more on the way.', color: P.warm_sand },
+  { year: '2021-2022', tag: 'CLASS X', desc: 'Where the curiosity started — figuring out how things work, one question at a time.', color: P.sage },
+  { year: '2023-2024', tag: 'CLASS XII', desc: 'Sharpened the fundamentals and found computer science — the subject that finally made sense.', color: P.dusty_rose },
+  { year: '2024-', tag: 'SHIPPING', desc: 'BMSCE, Computer Science. Verity, Safe Grid, an agentic notification router — real products, shipped.', color: P.warm_sand },
   { year: 'NEXT', tag: '?',        desc: 'Internships, collaborations, and whatever interesting problem finds me next.',               color: P.blue_gray },
 ]
+
+function TimelineItem({ t, index }: { t: typeof TIMELINE[0]; index: number }) {
+  const ref = useReveal()
+  return (
+    <div ref={ref} className="reveal" style={{ transitionDelay: `${index * 100}ms`, position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 22 }}>
+      <div aria-hidden="true" style={{ position: 'absolute', left: -34, top: 6, width: 12, height: 12, borderRadius: '50%', background: t.color, border: '2px solid #EDE8DD', boxShadow: `0 0 10px ${t.color}88`, zIndex: 2 }} />
+      <div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 7 }}>
+          <span style={{ fontFamily: 'JetBrains Mono', fontWeight: 500, fontSize: '1.05rem', color: P.ink }}>{t.year}</span>
+          <span style={{ fontFamily: 'DM Sans, sans-serif', fontWeight: 700, fontSize: '0.7rem', letterSpacing: '0.09em', color: t.color, padding: '2px 9px', background: `${t.color}22`, borderRadius: 20 }}>{t.tag}</span>
+          {t.year === 'NEXT' && <span style={{ fontFamily: 'Caveat', fontSize: '0.9rem', color: P.mountain }}>↩ TBD</span>}
+          {index === 2 && <span style={{ fontFamily: 'Caveat', fontSize: '0.82rem', color: P.muted }}>this one was fun</span>}
+        </div>
+        <p style={{ color: P.charcoal, fontSize: '0.88rem', lineHeight: 1.65, maxWidth: 460 }}>{t.desc}</p>
+      </div>
+    </div>
+  )
+}
 
 function Journey() {
   const ref = useReveal()
   const lineRef = useJourneyLine()
   return (
-    <section id="journey" className="py-24 px-6 graph-paper-alt">
-      <div className="max-w-6xl mx-auto">
+    <section id="journey" className="py-24 px-6 graph-paper-alt relative overflow-hidden">
+      <ColorWash color={P.dusty_pink} size={280} style={{ right: '-2%', top: '6%' }} />
+      <div className="max-w-6xl mx-auto relative">
         <div ref={ref} className="reveal">
           <Label idx="05" text="JOURNEY" />
           <h2 style={{ fontFamily: 'Fraunces, serif', fontStyle: 'italic', fontWeight: 300, fontSize: 'clamp(2rem,5vw,3.4rem)', color: P.ink, letterSpacing: '-0.02em', marginBottom: 52 }}>
-            where I've been.
+            Education
           </h2>
         </div>
         <div style={{ position: 'relative', paddingLeft: 34 }}>
@@ -1021,20 +1070,7 @@ function Journey() {
               stroke={P.berkeley} strokeWidth="1.5" fill="none" className="journey-line" strokeLinecap="round"/>
           </svg>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 44 }}>
-            {TIMELINE.map((t, i) => (
-              <div key={t.year} style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 22 }}>
-                <div aria-hidden="true" style={{ position: 'absolute', left: -34, top: 6, width: 12, height: 12, borderRadius: '50%', background: t.color, border: '2px solid #EDE8DD', boxShadow: `0 0 10px ${t.color}88`, zIndex: 2 }} />
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 7 }}>
-                    <span style={{ fontFamily: 'JetBrains Mono', fontWeight: 500, fontSize: '1.05rem', color: P.ink }}>{t.year}</span>
-                    <span style={{ fontFamily: 'DM Sans, sans-serif', fontWeight: 700, fontSize: '0.7rem', letterSpacing: '0.09em', color: t.color, padding: '2px 9px', background: `${t.color}22`, borderRadius: 20 }}>{t.tag}</span>
-                    {t.year === 'NEXT' && <span style={{ fontFamily: 'Caveat', fontSize: '0.9rem', color: P.mountain }}>↩ TBD</span>}
-                    {i === 2 && <span style={{ fontFamily: 'Caveat', fontSize: '0.82rem', color: P.muted }}>this one was fun</span>}
-                  </div>
-                  <p style={{ color: P.charcoal, fontSize: '0.88rem', lineHeight: 1.65, maxWidth: 460 }}>{t.desc}</p>
-                </div>
-              </div>
-            ))}
+            {TIMELINE.map((t, i) => <TimelineItem key={t.year} t={t} index={i} />)}
           </div>
         </div>
       </div>
