@@ -1,0 +1,18 @@
+[
+  {
+    "repo": "pixel-pudding/Coachline",
+    "name": "Coachline",
+    "summary": "Coachline - Backend & Infrastructure",
+    "stack": [
+      "typescript",
+      "python",
+      "css",
+      "mako",
+      "html"
+    ],
+    "positioning": "Highlight the sophisticated multi-agent orchestration and the real-time WebSocket-based mock interview system, framing it as a prime example of an agentic feedback loop in a production-ready backend.",
+    "image_url": "",
+    "url": "https://github.com/pixel-pudding/Coachline",
+    "updated_at": "2026-08-27T15:42:51.234622+00:00"
+  }
+]
