@@ -15,4 +15,18 @@
     "url": "https://github.com/pixel-pudding/Coachline",
     "updated_at": "2026-08-27T15:42:51.234622+00:00"
   }
+
+,
+  {
+    "repo": "pixel-pudding/Message-Notification-Router",
+    "name": "Message-Notification-Router",
+    "summary": "Built an AI-powered WhatsApp message routing system that prioritizes messages requiring immediate attention, defers non-urgent ones, and mutes low-priority content. The system reasons over text, images, and voice notes, using user, group, business, media, and interaction history to make personalized routing decisions.",
+    "stack": [
+      "python"
+    ],
+    "positioning": "Highlight the robust, multi-layered architecture where 'the model describes and code decides' to showcase advanced AI engineering and safety-critical system design, aligning with your interest in AI utilities.",
+    "image_url": "https://opengraph.githubassets.com/1/pixel-pudding/Message-Notification-Router",
+    "url": "https://github.com/pixel-pudding/Message-Notification-Router",
+    "updated_at": "2026-08-27T16:00:00.000000+00:00"
+  }
 ]
