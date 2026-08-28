@@ -1,63 +1,80 @@
-# Personal Portfolio
+# Aditi — Personal Portfolio
 
-A modern, interactive personal portfolio showcasing my projects, technical skills, experience, and journey as a Computer Science student and developer.
+A modern personal portfolio website showcasing my work, projects, technical skills, and journey as a Computer Science student and developer.
 
-## ✨ About
+The portfolio is designed to be more than a traditional resume website — it serves as a space to explore the things I build, experiment with new technologies, and document my growth as a developer.
 
-This portfolio is my digital space to showcase the things I build, experiment with, and learn along the way.
+## ✨ Highlights
 
-It highlights my work across software development, AI/ML, and modern web technologies, with a focus on building practical and user-focused applications.
+- Modern, responsive portfolio experience
+- Interactive project showcase
+- Detailed presentation of technical skills
+- AI and software development projects
+- Smooth animations and micro-interactions
+- Responsive design across desktop, tablet, and mobile
+- Links to professional and developer profiles
+- Clean, minimal developer-focused interface
 
-## 🚀 Features
+## 🧑‍💻 About
 
-- 🎨 Modern and responsive UI
-- 💻 Interactive project showcase
-- 🧠 AI/ML project highlights
-- 🛠️ Technical skills and technology stack
-- 📄 Resume / experience section
-- 🔗 Links to GitHub and other platforms
-- 📱 Fully responsive across devices
-- ⚡ Smooth animations and interactions
+I'm a Computer Science student interested in building practical software and exploring the rapidly evolving world of Artificial Intelligence.
 
-## 🛠️ Tech Stack
+My interests span:
 
-**Frontend**
-- React
-- TypeScript / JavaScript
-- HTML5
-- CSS3
-- Tailwind CSS
-
-**Tools & Technologies**
-- Git & GitHub
-- Vite
-- REST APIs
-- AI/ML APIs
-
-## 📂 Featured Projects
-
-Some of the projects showcased in the portfolio include:
-
-### Launchpad AI
-An AI-powered developer platform designed to help users build, monitor, and understand AI-powered applications.
-
-### [Project Name]
-Brief description of the project and the problem it solves.
-
-### [Project Name]
-Brief description of the project and the technologies used.
-
-## 🎯 What I'm Currently Exploring
-
+- Software Engineering
 - Artificial Intelligence & Generative AI
 - Machine Learning
 - Full-Stack Development
 - Developer Tools
-- Building products that solve real-world problems
+- Product Development
 
-## 🏃 Running Locally
+I enjoy taking an idea from concept to a working product and learning whatever is necessary along the way.
 
-Clone the repository:
+## 🚀 Projects
 
-```bash
-git clone https://github.com/yourusername/portfolio.git
+The portfolio features projects I've built across AI, software development, and modern web technologies.
+
+Each project focuses on solving a practical problem while giving me the opportunity to explore new technologies, architectures, and development approaches.
+
+Projects include AI-powered applications, developer-focused tools, and full-stack web experiences.
+
+## 🛠️ Technologies
+
+### Languages
+
+- Python
+- Java
+- JavaScript
+- TypeScript
+- HTML
+- CSS
+
+### Development
+
+- React
+- Vite
+- Tailwind CSS
+- REST APIs
+- Git
+- GitHub
+
+### AI / ML
+
+- Generative AI
+- Large Language Models
+- Machine Learning
+- AI APIs
+- Model Integration
+
+## 🎨 Design Philosophy
+
+The portfolio follows a developer-focused visual language with an emphasis on:
+
+- Clarity over clutter
+- Strong typography
+- Subtle animations
+- Intuitive navigation
+- Responsive layouts
+- Meaningful interactions
+
+The goal is to make the website feel like a product rather than a static resume
