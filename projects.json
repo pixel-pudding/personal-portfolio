@@ -29,4 +29,21 @@
     "url": "https://github.com/pixel-pudding/Message-Notification-Router",
     "updated_at": "2026-08-27T16:00:00.000000+00:00"
   }
+
+    ,
+      {
+        "repo": "AmeyaSingh23/SubTrack",
+        "name": "SubTrack",
+        "summary": "SubTrack",
+        "stack": [
+          "Next.js",
+          "Prisma",
+          "React",
+          "TypeScript"
+        ],
+        "positioning": "Highlight the modern Next.js 16 architecture, specifically the use of React Server Components and Server Actions, alongside the automated cron-based email notification system.",
+        "image_url": "https://image.thum.io/get/width/1200/https://sub-track-gamma.vercel.app",
+        "url": "https://sub-track-gamma.vercel.app",
+        "updated_at": "2026-08-27T16:15:00.000000+00:00"
+      }
 ]
