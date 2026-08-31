@@ -48,19 +48,28 @@
       }
 
         ,
-              {
-                "repo": "pixel-pudding/LaunchPad-AI",
-                "name": "LaunchPad-AI",
-                "summary": "LaunchPad-AI",
-                "stack": [
-                  "FastAPI",
-                  "Gemini",
-                  "Next.js",
-                  "Docker"
-                ],
-                "positioning": "Highlight the autonomous decision-making capability of the Relevance Curator and the robust, event-driven Google Cloud architecture (Cloud Run, Pub/Sub, Firestore) that powers it.",
-                "image_url": "https://img.shields.io/badge/Live%20Demo-Cloud%20Run-4F684F?style=for-the-badge&logo=googlecloud",
-                "url": "https://github.com/pixel-pudding/LaunchPad-AI",
-                "updated_at": "2026-08-27T16:30:00.000000+00:00"
-              }
+                            {
+                              "repo": "pixel-pudding/LaunchPad-AI",
+                              "name": "LaunchPad-AI",
+                              "summary": "LaunchPad-AI",
+                              "stack": [
+                                "FastAPI",
+                                "Gemini",
+                                "JWT",
+                                "LLMs",
+                                "Next.js",
+                                "React",
+                                "CSS",
+                                "Docker",
+                                "dockerfile",
+                                "HTML",
+                                "JavaScript",
+                                "Python",
+                                "shell"
+                              ],
+                              "positioning": "Highlight LaunchPad-AI as an autonomous, event-driven agent that solves developer friction by managing portfolio and LinkedIn updates using Google ADK and Gemini 3.5 Flash.",
+                              "image_url": "https://img.shields.io/badge/Live%20Demo-Cloud%20Run-4F684F?style=for-the-badge&logo=googlecloud",
+                              "url": "https://github.com/pixel-pudding/LaunchPad-AI",
+                              "updated_at": "2026-08-27T16:30:00.000000+00:00"
+                            }
 ]
